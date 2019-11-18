@@ -1,0 +1,143 @@
+---
+title: "Task4"
+author: "Kirill Tumanov"
+date: "15 11 2019"
+output: 
+   html_document:
+    theme: journal
+    highlight: haddock
+    toc: true
+    toc_float: false
+    toc_depth: 4
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ggplot2)
+library(scales)
+library(dplyr)
+library(lubridate)
+library(readr)
+library(forecast)
+```
+
+#Download data
+```{r}
+storedata <- read_csv("C:/Users/Asus/Downloads/storedata.csv")
+storedata <- storedata %>%
+  mutate(Order_Date = as.Date(Order_Date),
+         year = lubridate::year(Order_Date),
+         month = lubridate::month(Order_Date))
+```
+
+#Task1
+For the last 3 months of 2017, calculate the total Sales by month, for Region 1 and Region 9 in the Customer_Segment, Corporate and Consumer. This output is Table 1.
+```{r}
+Table1 <- storedata %>%
+  filter(year==2017, month>=10) %>%
+  filter(Region == "Region 1" | Region == "Region 9") %>%
+  filter(Customer_Segment == "Corporate" | Customer_Segment == "Consumer") %>%
+  group_by(month, Region, Customer_Segment) %>%
+  summarise(TotalSales = sum(Sales))
+view(Table1)
+```
+
+#Task2
+Make a plot of the monthly total Sales in Region 1 and Region 13 in 2015, 2016 and 2017. This output is Figure 1.
+```{r}
+Figure1 <- storedata %>%
+  filter(year<=2017&year>=2015) %>%
+  filter (Region == "Region 1" | Region == "Region 13") %>%
+  group_by(year, month, Region) %>%
+  summarise(TotalSales = sum(Sales)) %>%
+  mutate(date = as.Date(lubridate::ymd(paste(year,month,01))))
+
+Figure1 %>%
+  ggplot(aes(x = date, y = TotalSales, color = Region)) +
+  geom_line() +
+    labs(x = "Date", y = "Total Sales", title = "The monthly total Sales in Region 1 and Region 13 in 2015, 2016 and 2017") + scale_x_date(breaks = date_breaks("months"), labels = date_format("%b-%y")) +  theme(axis.text.x = element_text(angle=50))
+```
+
+#Task3
+In Figure 1, identify the months where the total Sales in Region 13 is greater than the total Sales in Region 1. This output is Table 2.
+```{r}
+data01 <- Figure1 %>% filter(Region == "Region 1")
+data02 <- Figure1 %>% filter(Region == "Region 13")
+Table2 <- full_join(data01, data02, by="date") %>%
+  mutate(diff = (TotalSales.y - TotalSales.x) > 0) %>% filter(diff > 0) %>%
+  select(date, diff)
+
+names(Table2) <- c("year","month","Date","Total Sales: Region 13 > 1")
+Table2 <- Table2[,c("Date","Total Sales: Region 13 > 1")]
+
+view(Table2)
+```
+
+#Task4
+Find average Profit per Customer_Segment and Product_Category in 2017, for all regions except Region 3, 5 and 8. What segment produced the highest average profit? This output is Table 3.
+```{r}
+Table3 <- storedata[storedata$Order_Date >= "2017-01-01" & storedata$Order_Date <= "2017-12-31",] %>%
+  filter(year==2017) %>%
+  filter(Region == c("Region 1", "Region 2", "Region 4", "Region 6", "Region 7", "Region 9", "Region 10", "Region 11", "Region 12", "Region 13")) %>%
+  select(Profit, Customer_Segment, Product_Category, Region) %>%
+group_by(Region, Customer_Segment, Product_Category) %>% 
+  summarise(Average_profit = mean(Profit)) %>%
+  arrange(-`Average_profit`)
+
+view(Table3)
+```
+The highest average profit was received by Small Business in Region 9. This number was 4801.
+Product category was Furniture.
+
+#Task5
+Estimate a SARIMA model on the aggregated monthly Order_Quantity in the Customer_Segment; Small Business and Product_Category; Office Supplies. The SARIMA model contains the following parameters:
+p - AR order, 
+d - difference order, 
+q - MA order, 
+P - SAR order, 
+D - seasonal difference, 
+Q - SMA order, 
+S - seasonal period (12 months in these data)
+```{r}
+##Preparing Data
+sarmodel <- storedata[storedata$Customer_Segment=="Small Business"& storedata$Product_Category=="Office Supplies",]
+sarmodel <- sarmodel %>% 
+   group_by(year, month) %>%
+  summarise(sum_ord_quant = sum(Order_Quantity))
+sar_now <- sarmodel %>%
+   filter(year<=2016&year>=2014)
+sar_future <- sarmodel %>%
+   filter(year==2017)
+
+##What is Arima? Testing
+###Arima14-16
+tsdata14_16 <- ts(sar_now$sum_ord_quant, frequency = 12, start = c(2014, 1),end=c(2016, 12))
+plot(tsdata14_16)
+autoarima01 <- auto.arima(tsdata14_16)
+forecast01 <- forecast(autoarima01, h=12)
+plot(forecast01)
+
+###Arima17
+tsdata17 <- ts(sar_future$sum_ord_quant, frequency = 12, start=c(2017, 1), end=c(2017, 12))
+plot(tsdata17)
+autoarima02 <- auto.arima(tsdata17)
+forecast02 <- forecast(autoarima02, h=12)
+plot(forecast02)
+```
+
+#Plots
+```{r}
+#2014-2016
+fit01 <- Arima(tsdata14_16, order=c(0,1,1), seasonal=c(1,1,1))
+checkresiduals(fit01)
+fit01 %>% forecast(h=12) %>% autoplot(xlab="Date", ylab="Order Quantity",
+    main="Order Quantity 2014-2016")
+
+#The forecast for 2017
+Figure2 <- Arima(tsdata17, order=c(1,1,0), seasonal=c(0,0,1))
+checkresiduals(Figure2)
+Figure2 %>% forecast(h=12) %>% autoplot(xlab="Date", ylab="Order Quantity",
+    main="The forecast of order quantity for 2017 ")
+```
+
