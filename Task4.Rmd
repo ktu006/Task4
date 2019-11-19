@@ -118,6 +118,13 @@ autoarima01 <- auto.arima(tsdata14_16)
 forecast01 <- forecast(autoarima01, h=12)
 plot(forecast01)
 
+p <- (0:4)
+d <- (0:1)
+q <- (0:4)
+P <- (0:4)
+D <- (0:1)
+Q <- (0:4)
+
 ###Arima17
 tsdata17 <- ts(sar_future$sum_ord_quant, frequency = 12, start=c(2017, 1), end=c(2017, 12))
 plot(tsdata17)
